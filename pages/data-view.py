@@ -113,7 +113,7 @@ else:
         st.write("Resumo das principais variáveis no período selecionado:")
         
         # Seleciona as colunas mais importantes para o describe
-        colunas_stats = ['power_out', 'rpm', 'windspeed_(ref)', 'voltage_in', 't1', 't2', 't3']
+        colunas_stats = ['power_out', 'rpm', 'windspeed_(ref)', 'voltage_in']
         # Usamos .style.format para deixar os números mais legíveis
         st.dataframe(df_filtrado[colunas_stats].describe().style.format('{:.2f}'))
 
