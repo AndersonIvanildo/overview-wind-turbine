@@ -108,7 +108,14 @@ else:
     fig_col1, fig_col2 = st.columns(2)
 
     with fig_col1:
-        st.write("Olá")
+        # Tabela 1: Estatísticas Descritivas
+        st.subheader("Estatísticas Descritivas")
+        st.write("Resumo das principais variáveis no período selecionado:")
+        
+        # Seleciona as colunas mais importantes para o describe
+        colunas_stats = ['power_out', 'rpm', 'windspeed_(ref)', 'voltage_in', 't1', 't2', 't3']
+        # Usamos .style.format para deixar os números mais legíveis
+        st.dataframe(df_filtrado[colunas_stats].describe().style.format('{:.2f}'))
 
     with fig_col2:
         st.subheader("Distribuição de Operação Normal vs. Anomalia")
@@ -123,3 +130,29 @@ else:
         st.plotly_chart(fig_pizza, use_container_width=True)
 
     st.markdown("---")
+
+    if ano_selecionado != "Todos":
+        st.subheader(f"Análise de Anomalias por Mês em {ano_selecionado}")
+        
+        # Agrupa os dados por mês
+        analise_mensal = df_filtrado.groupby(df_filtrado.index.month).agg(
+            total_registros=('failure', 'size'),
+            taxa_de_anomalia=('failure', 'mean')
+        )
+        # Converte a taxa para percentual
+        analise_mensal['taxa_de_anomalia'] = analise_mensal['taxa_de_anomalia'] * 100
+        
+        # Adiciona o nome do mês
+        analise_mensal['mes'] = analise_mensal.index.map(lambda x: meses_nomes[x-1])
+        analise_mensal = analise_mensal[['mes', 'total_registros', 'taxa_de_anomalia']]
+
+        # Exibe a tabela com uma barra de progresso para a taxa de anomalia
+        st.dataframe(analise_mensal.style.format({'taxa_de_anomalia': '{:.2f}%'}),
+                     use_container_width=True,
+                     column_config={
+                         "taxa_de_anomalia": st.column_config.ProgressColumn(
+                             "Taxa de Anomalia (%)",
+                             min_value=0,
+                             max_value=100,
+                         ),
+                     })
