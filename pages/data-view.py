@@ -2,14 +2,7 @@ import streamlit as st
 from data_tools import df_wind_turbine
 import plotly.express as px
 
-# --- Configuração da Página (Opcional, mas recomendado) ---
-st.set_page_config(
-    page_title="Dashboard de Turbina Eólica USP",
-    page_icon="🌬️",
-    layout="wide"
-)
-
-# --- BARRA LATERAL COM FILTROS E INSTRUÇÕES ---
+# BARRA LATERAL COM FILTROS E INSTRUÇÕES
 st.sidebar.header("Filtros Interativos")
 st.sidebar.info(
     """
@@ -23,13 +16,13 @@ st.sidebar.info(
 anos = ["Todos"] + sorted(df_wind_turbine.index.year.unique())
 ano_selecionado = st.sidebar.selectbox("Selecione o Ano", anos)
 
-# Filtro de meses aparece condicionalmente
+# Filtro de meses
 meses_selecionados_nomes = []
 if ano_selecionado != "Todos":
     meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
     meses_selecionados_nomes = st.sidebar.multiselect("Selecione o(s) Mês(es)", meses_nomes)
 
-# --- LÓGICA DE FILTRAGEM DO DATAFRAME ---
+# LÓGICA DE FILTRAGEM DO DATAFRAME
 df_filtrado = df_wind_turbine.copy()
 
 # 1. Aplica o filtro de ano
@@ -39,7 +32,7 @@ if ano_selecionado != "Todos":
 else:
     periodo_texto = "(2017-2022)"
 
-# 2. Aplica o filtro de mês (se algum for selecionado)
+# 2. Aplica o filtro de mês
 if meses_selecionados_nomes:
     mapa_meses = {nome: i+1 for i, nome in enumerate(meses_nomes)}
     meses_selecionados_numeros = [mapa_meses[nome] for nome in meses_selecionados_nomes]
@@ -50,7 +43,7 @@ if meses_selecionados_nomes:
     periodo_texto = f"de {meses_str} de {ano_selecionado}"
 
 
-# --- SEÇÃO PRINCIPAL (agora usando df_filtrado) ---
+# SEÇÃO PRINCIPAL
 st.header(f"Visão Geral do Desempenho {periodo_texto}")
 
 # Verifica se o dataframe filtrado não está vazio antes de continuar
@@ -70,11 +63,9 @@ else:
 
     kpi1, kpi2 = st.columns(2)
 
-    # Cálculos para os KPIs usando o DATAFRAME FILTRADO
     total_registros = df_filtrado.shape[0]
     perc_anomalias = df_filtrado['failure'].mean() * 100
 
-    # Exibindo os KPIs
     kpi1.metric(
         label="Total de Registros (minutos)",
         value=f"{total_registros:,}".replace(",", ".")
@@ -89,3 +80,84 @@ else:
     )
 
     st.markdown("---")
+
+    # --- Gráfico Principal ---
+    st.subheader("Distribuição de Anomalias ao Longo do Tempo")
+
+    # Resample por mês para visualização
+    df_resampled = df_filtrado.resample('M')['failure'].value_counts().unstack(fill_value=0)
+    df_resampled.rename(columns={0: 'Normal', 1: 'Anomalia'}, inplace=True)
+
+    fig_anomalias_tempo = px.bar(
+        df_resampled,
+        x=df_resampled.index,
+        y=['Normal', 'Anomalia'],
+        title="Contagem de Registros Normais vs. Anômalos por Mês",
+        labels={'value': 'Contagem de Registros', 'log_time': 'Data'},
+        color_discrete_map={'Normal': '#1f77b4', 'Anomalia': '#ff7f0e'},
+        template='plotly_white'
+    )
+
+    st.plotly_chart(fig_anomalias_tempo, use_container_width=True)
+
+    st.markdown("""
+    A análise revelou que a turbina opera em estado de anomalia na maior parte do tempo. 
+    O gráfico acima mostra como essas ocorrências se distribuem, permitindo-nos identificar períodos 
+    de maior instabilidade operacional.
+    """)
+
+    st.markdown("---")
+
+    st.header("Capítulo 2: O Coração da Turbina - Performance")
+
+    st.markdown("""
+    A performance de uma turbina é medida por sua capacidade de converter a energia do vento em eletricidade. 
+    As variáveis `power_out`, `rpm` e `windspeed_(ref)` são os indicadores mais diretos dessa eficiência.
+    """)
+
+    # --- Gráfico 1: Curva de Potência ---
+    st.subheader("Curva de Potência: Velocidade do Vento vs. Energia Gerada")
+
+    fig_power_curve = px.scatter(
+        df_filtrado,
+        x='windspeed_(ref)',
+        y='power_out',
+        title='Curva de Potência',
+        labels={'windspeed_(ref)': 'Velocidade do Vento (m/s)', 'power_out': 'Potência de Saída (W)'},
+        template='plotly_white',
+        opacity=0.5
+    )
+    st.plotly_chart(fig_power_curve, use_container_width=True)
+    st.markdown("""
+    A curva de potência ilustra a relação entre a velocidade do vento e a energia gerada. 
+    Pontos fora do padrão esperado podem indicar ineficiências ou falhas.
+    """)
+
+
+    # --- Gráfico 2: RPM vs. Tensão ---
+    st.subheader("Relação entre RPM e Tensão de Entrada")
+
+    fig_rpm_voltage = px.scatter(
+        df_filtrado,
+        x='rpm',
+        y='voltage_in',
+        title='Tensão Real vs. Tensão Mínima Esperada',
+        labels={'rpm': 'Rotação por Minuto (RPM)', 'voltage_in': 'Tensão (V)'},
+        opacity=0.3,
+        template='plotly_white'
+    )
+
+    # Adicionando a curva de tensão mínima esperada
+    fig_rpm_voltage.add_scatter(
+        x=df_filtrado['rpm'],
+        y=df_filtrado['min_v_from_rpm'],
+        mode='markers',
+        name='Tensão Mínima Esperada',
+        marker=dict(color='orange', opacity=0.3)
+    )
+
+    st.plotly_chart(fig_rpm_voltage, use_container_width=True)
+    st.markdown("""
+    A tensão gerada (`voltage_in`, azul) deve ser superior a um mínimo esperado (`min_v_from_rpm`, laranja) 
+    para uma dada rotação. Pontos azuis abaixo da curva laranja podem sinalizar problemas na geração de energia.
+    """)
